@@ -53,8 +53,15 @@ function HistoryRow({ item, onRun }: { item: HistoryItem; onRun: (prompt: string
           className="min-w-0 flex-1 text-left"
         >
           <p className="truncate text-[13px] font-medium">{item.title}</p>
-          <p className="mt-0.5 truncate text-[11px] text-muted">
-            {item.when} · {item.duration} · {item.steps} steps · {item.model}
+          <p className="mt-0.5 flex items-center gap-1.5 truncate text-[11px] text-muted">
+            <span className="truncate">
+              {item.when} · {item.duration} · {item.steps} steps · {item.model}
+            </span>
+            {item.live ? (
+              <span className="shrink-0 rounded-full border border-[rgb(var(--accent)/0.3)] bg-[rgb(var(--accent)/0.1)] px-1.5 py-[1px] text-[9.5px] uppercase tracking-[0.1em] text-[rgb(var(--accent-2))]">
+                This session
+              </span>
+            ) : null}
           </p>
         </button>
 
@@ -88,15 +95,31 @@ function HistoryRow({ item, onRun }: { item: HistoryItem; onRun: (prompt: string
   )
 }
 
-export function HistoryView({ onRun }: { onRun: (prompt: string) => void }) {
+export function HistoryView({
+  onRun,
+  recorded = [],
+  onClear,
+}: {
+  onRun: (prompt: string) => void
+  recorded?: HistoryItem[]
+  onClear?: () => void
+}) {
   const [filter, setFilter] = useState<FilterId>('all')
 
-  const items = filter === 'all' ? HISTORY : HISTORY.filter((item) => item.status === filter)
+  const source = [...recorded, ...HISTORY]
+  const items = filter === 'all' ? source : source.filter((item) => item.status === filter)
 
   return (
     <ViewFrame
       title="Task History"
       subtitle="Every run NEXORA has performed, with status, duration and a re-run shortcut."
+      action={
+        recorded.length > 0 && onClear ? (
+          <Button variant="ghost" size="sm" onClick={onClear}>
+            Clear session runs
+          </Button>
+        ) : undefined
+      }
     >
       <div className="mb-4 flex flex-wrap items-center gap-1.5">
         {FILTERS.map((option) => (

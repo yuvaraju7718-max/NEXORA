@@ -205,6 +205,7 @@ export interface HistoryItem {
   duration: string
   steps: number
   summary: string
+  live?: boolean
 }
 
 export const HISTORY: HistoryItem[] = [

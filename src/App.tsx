@@ -24,7 +24,8 @@ import { ApiKeyView } from './components/views/ApiKeyView'
 import { useAgent } from './hooks/useAgent'
 import { useTheme } from './hooks/useTheme'
 import { usePersistentState } from './hooks/usePersistentState'
-import { cn } from './lib/cn'
+import { cn, formatDuration, formatTime, uid } from './lib/cn'
+import { type HistoryItem } from './lib/mock'
 import { DEFAULT_SETTINGS, MODELS, type Settings, type ViewId } from './types'
 
 const MOBILE_NAV: Array<{ id: ViewId; label: string; icon: LucideIcon }> = [
@@ -39,15 +40,30 @@ export default function App() {
   const { theme, toggleTheme } = useTheme()
   const [settings, setSettings] = usePersistentState<Settings>('nexora.settings', DEFAULT_SETTINGS)
   const [apiKey, setApiKey] = usePersistentState('nexora.apikey', { provider: 'Anthropic', key: '' })
-  const agent = useAgent()
+  const [recordedRuns, setRecordedRuns] = usePersistentState<HistoryItem[]>('nexora.history', [])
+
+  const modelLabel = MODELS.find((option) => option.id === settings.model)?.label ?? MODELS[0]!.label
+
+  const agent = useAgent((result) => {
+    const entry: HistoryItem = {
+      id: uid(),
+      title: result.title,
+      status: result.status,
+      model: modelLabel,
+      when: `Today · ${formatTime(Date.now())}`,
+      duration: formatDuration(result.durationMs),
+      steps: result.steps,
+      summary: result.summary,
+      live: true,
+    }
+    setRecordedRuns((current) => [entry, ...current].slice(0, 40))
+  })
 
   const [view, setView] = useState<ViewId>('home')
   const [collapsed, setCollapsed] = useState(false)
   const [panelOpen, setPanelOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [listening, setListening] = useState(false)
-
-  const modelLabel = MODELS.find((option) => option.id === settings.model)?.label ?? MODELS[0]!.label
 
   useEffect(() => {
     document.documentElement.dataset.motion = settings.reducedMotion ? 'reduced' : 'full'
@@ -107,7 +123,7 @@ export default function App() {
       case 'terminal':
         return <TerminalView onRun={runPrompt} />
       case 'history':
-        return <HistoryView onRun={runPrompt} />
+        return <HistoryView onRun={runPrompt} recorded={recordedRuns} onClear={() => setRecordedRuns([])} />
       case 'settings':
         return (
           <SettingsView

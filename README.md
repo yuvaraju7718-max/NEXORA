@@ -57,7 +57,10 @@ npm run typecheck  # tsc --noEmit
 - **File Manager** — tree, filterable list and preview with copy.
 - **Terminal** — interactive mock shell (`help`, `ls`, `pwd`, `echo`, `date`,
   `whoami`, `nexora`, `copy`, `clear`, `agent <prompt>`), command history.
-- **Task History** — filters, expandable rows and re-run.
+- **Task History** — filters, expandable rows and re-run. Every run from the
+  current session is appended automatically (status, duration, steps, summary),
+  badged **This session**, persisted in `localStorage` and clearable without
+  touching the sample history.
 - **Settings** — theme, reduce-motion, model and autonomy policy.
 - **API Key** — provider picker, show/hide, local format validation, save.
 - **Keyboard** — `Ctrl/Cmd + K` focuses the composer, `Esc` closes the drawer.

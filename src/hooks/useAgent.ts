@@ -13,7 +13,15 @@ export interface UseAgent {
   reset: () => void
 }
 
-export function useAgent(): UseAgent {
+export interface AgentRunResult {
+  title: string
+  status: 'completed' | 'error'
+  durationMs: number
+  steps: number
+  summary: string
+}
+
+export function useAgent(onRunEnd?: (result: AgentRunResult) => void): UseAgent {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [task, setTask] = useState<AgentTask | null>(null)
   const [status, setStatus] = useState<OrbState>('idle')
@@ -22,6 +30,13 @@ export function useAgent(): UseAgent {
   const runRef = useRef<AgentRun | null>(null)
   const busyRef = useRef(false)
   const mountedRef = useRef(true)
+  const taskRef = useRef<AgentTask | null>(null)
+  const onRunEndRef = useRef(onRunEnd)
+  const endRunRef = useRef<((status: 'completed' | 'error', summary: string) => void) | null>(null)
+
+  useEffect(() => {
+    onRunEndRef.current = onRunEnd
+  }, [onRunEnd])
 
   useEffect(() => {
     mountedRef.current = true
@@ -36,6 +51,27 @@ export function useAgent(): UseAgent {
     if (!prompt || busyRef.current) return
 
     const assistantId = uid()
+    let assistantText = ''
+    let ended = false
+
+    const recordEnd = (status: 'completed' | 'error', summary: string) => {
+      if (ended) return
+      ended = true
+      endRunRef.current = null
+      const current = taskRef.current
+      const durationMs = current?.startedAt
+        ? (current.finishedAt ?? Date.now()) - current.startedAt
+        : 0
+      onRunEndRef.current?.({
+        title: current?.title ?? prompt,
+        status,
+        durationMs,
+        steps: current?.steps.length ?? 0,
+        summary,
+      })
+    }
+    endRunRef.current = recordEnd
+
     setMessages((prev) => [
       ...prev,
       { id: uid(), role: 'user', content: prompt, createdAt: Date.now() },
@@ -51,9 +87,11 @@ export function useAgent(): UseAgent {
         if (mountedRef.current) setStatus(next)
       },
       onTask: (next) => {
+        taskRef.current = next
         if (mountedRef.current) setTask(next)
       },
       onToken: (delta) => {
+        assistantText += delta
         if (!mountedRef.current) return
         setMessages((prev) =>
           prev.map((message) =>
@@ -71,6 +109,7 @@ export function useAgent(): UseAgent {
         busyRef.current = false
         setBusy(false)
         setStatus('idle')
+        recordEnd('completed', assistantText.trim() || 'Run complete.')
       },
       onError: (message) => {
         if (!mountedRef.current) return
@@ -84,26 +123,31 @@ export function useAgent(): UseAgent {
         busyRef.current = false
         setBusy(false)
         setStatus('idle')
+        recordEnd('error', message)
       },
     })
   }, [])
 
   const cancel = useCallback(() => {
+    endRunRef.current?.('error', 'Cancelled by user')
     runRef.current?.cancel()
     busyRef.current = false
     setBusy(false)
     setStatus('idle')
     setTask((prev) => {
       if (!prev) return prev
-      return {
+      const next: AgentTask = {
         ...prev,
         status: 'error',
         error: 'Cancelled by user',
         activity: 'Execution stopped',
+        finishedAt: prev.finishedAt ?? Date.now(),
         steps: prev.steps.map((step) =>
           step.status === 'running' ? { ...step, status: 'error' } : step,
         ),
       }
+      taskRef.current = next
+      return next
     })
     setMessages((prev) =>
       prev.map((message) =>
@@ -119,8 +163,10 @@ export function useAgent(): UseAgent {
   }, [])
 
   const reset = useCallback(() => {
+    endRunRef.current?.('error', 'Cancelled before completion')
     runRef.current?.cancel()
     busyRef.current = false
+    taskRef.current = null
     setMessages([])
     setTask(null)
     setStatus('idle')
