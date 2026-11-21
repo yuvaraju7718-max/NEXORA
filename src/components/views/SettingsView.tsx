@@ -5,6 +5,7 @@ import { Button } from '../ui/Button'
 import { ViewFrame } from './ViewFrame'
 import type { Theme } from '../../hooks/useTheme'
 import { getAgentEndpoint, isLiveTransport } from '../../lib/agent'
+import type { DesktopInfo } from '../../vite-env'
 
 const AUTONOMY_COPY: Record<Autonomy, string> = {
   safe: 'Read-only tools run freely. Anything that writes or changes state asks first.',
@@ -19,6 +20,7 @@ export function SettingsView({
   onToggleTheme,
   onOpenApiKey,
   apiKey,
+  desktopInfo,
 }: {
   settings: Settings
   onChange: (patch: Partial<Settings>) => void
@@ -26,6 +28,7 @@ export function SettingsView({
   onToggleTheme: () => void
   onOpenApiKey: () => void
   apiKey: { provider: string; key: string }
+  desktopInfo?: DesktopInfo | null
 }) {
   const model = MODELS.find((option) => option.id === settings.model) ?? MODELS[0]!
   const hasKey = apiKey.key.trim().length > 0
@@ -142,6 +145,12 @@ export function SettingsView({
         <SectionCard title="About" description="What you are running.">
           <dl className="space-y-2.5 text-[12.5px]">
             {[
+              ...(desktopInfo
+                ? ([
+                    ['Shell', `Electron ${desktopInfo.electron}`],
+                    ['Platform', `${desktopInfo.platform} · ${desktopInfo.arch}`],
+                  ] as Array<[string, string]>)
+                : []),
               ['Version', '0.1.0 · preview'],
               ['Interface', 'Waterglass UI'],
               ['Transport', live ? 'Live endpoint' : 'Simulated agent'],

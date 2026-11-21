@@ -4,12 +4,16 @@
   "version": "0.1.0",
   "type": "module",
   "description": "NEXORA — a waterglass AI agent operating system.",
+  "main": "electron/main.mjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "mock:agent": "node scripts/mock-agent.mjs"
+    "mock:agent": "node scripts/mock-agent.mjs",
+    "electron": "electron .",
+    "dev:desktop": "node scripts/dev-desktop.mjs",
+    "desktop": "npm run build && electron ."
   },
   "dependencies": {
     "framer-motion": "^14.14.0",
@@ -23,6 +27,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
+    "electron": "^45.4.1",
     "tailwindcss": "^4.3.5",
     "typescript": "^7.0.2",
     "vite": "^8.3.8"

@@ -27,6 +27,7 @@ import { usePersistentState } from './hooks/usePersistentState'
 import { cn, formatDuration, formatTime, uid } from './lib/cn'
 import { type HistoryItem } from './lib/mock'
 import { DEFAULT_SETTINGS, MODELS, type Settings, type ViewId } from './types'
+import type { DesktopInfo } from './vite-env'
 
 const MOBILE_NAV: Array<{ id: ViewId; label: string; icon: LucideIcon }> = [
   { id: 'home', label: 'Home', icon: House },
@@ -64,6 +65,18 @@ export default function App() {
   const [panelOpen, setPanelOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [listening, setListening] = useState(false)
+  const [desktopInfo, setDesktopInfo] = useState<DesktopInfo | null>(null)
+
+  useEffect(() => {
+    if (!window.nexora?.isDesktop) return
+    let active = true
+    void window.nexora.getInfo().then((info) => {
+      if (active) setDesktopInfo(info)
+    })
+    return () => {
+      active = false
+    }
+  }, [])
 
   useEffect(() => {
     document.documentElement.dataset.motion = settings.reducedMotion ? 'reduced' : 'full'
@@ -133,6 +146,7 @@ export default function App() {
             onToggleTheme={toggleTheme}
             onOpenApiKey={() => navigate('api-key')}
             apiKey={apiKey}
+            desktopInfo={desktopInfo}
           />
         )
       case 'api-key':

@@ -34,10 +34,24 @@ npm run build      # typecheck + vite build
 npm run preview
 ```
 
+Desktop shell (Electron 45):
+
+```bash
+npm run dev:desktop  # Vite + Electron window on the dev server
+npm run desktop      # build first, then open dist/index.html in Electron
+```
+
+`electron/main.mjs` owns the native window; `electron/preload.cjs` exposes a
+small, isolated `window.nexora` bridge (`getInfo`, `openExternal`). Settings →
+About shows the Electron/Chromium version when running as a desktop app. Links
+that try to leave the app open in the system browser. Vite uses relative asset
+paths (`base: './'`) so the built app also works over `file://`.
+
 Other scripts:
 
 ```bash
-npm run typecheck  # tsc --noEmit
+npm run typecheck    # tsc --noEmit
+npm run mock:agent   # SSE test backend on :8787
 ```
 
 ## What works
@@ -90,6 +104,12 @@ src/
     ui/                      Button, Field, Toggle, Badge, SectionCard…
     views/                   Projects, Browser, Files, Terminal, History,
                              Settings, ApiKey, ViewFrame
+electron/
+  main.mjs                   native window, IPC handlers, navigation policy
+  preload.cjs                isolated window.nexora bridge
+scripts/
+  dev-desktop.mjs            Vite + Electron dev launcher
+  mock-agent.mjs             SSE test backend
 ```
 
 ## Connecting a real agent
@@ -156,8 +176,10 @@ app is on the live endpoint or the simulation.
 `useAgent` already handles message assembly, streaming tokens, cancellation and
 resetting, so no component needs to change.
 
-For the desktop build, expose `window.nexora.run(prompt)` over Electron IPC and
-emit the same events; `runAgent` is the only function that needs a branch.
+The Electron bridge already provides `window.nexora` (identity, `getInfo`,
+`openExternal`). When a native agent core lands, add `run(prompt)` plus an event
+channel to `electron/preload.cjs` and branch inside `runAgent`; no component
+needs to change.
 
 ## Design tokens
 
