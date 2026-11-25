@@ -26,6 +26,7 @@ import { useTheme } from './hooks/useTheme'
 import { usePersistentState } from './hooks/usePersistentState'
 import { cn, formatDuration, formatTime, uid } from './lib/cn'
 import { type HistoryItem } from './lib/mock'
+import { DEFAULT_OLLAMA_SETTINGS, normalizeOllamaSettings, type OllamaSettings } from './lib/ollama'
 import { DEFAULT_SETTINGS, MODELS, type Settings, type ViewId } from './types'
 import type { DesktopInfo } from './vite-env'
 
@@ -42,8 +43,12 @@ export default function App() {
   const [settings, setSettings] = usePersistentState<Settings>('nexora.settings', DEFAULT_SETTINGS)
   const [apiKey, setApiKey] = usePersistentState('nexora.apikey', { provider: 'Anthropic', key: '' })
   const [recordedRuns, setRecordedRuns] = usePersistentState<HistoryItem[]>('nexora.history', [])
+  const [ollama, setOllama] = usePersistentState<OllamaSettings>('nexora.ollama', DEFAULT_OLLAMA_SETTINGS)
 
-  const modelLabel = MODELS.find((option) => option.id === settings.model)?.label ?? MODELS[0]!.label
+  const ollamaSettings = normalizeOllamaSettings(ollama)
+  const modelLabel = ollamaSettings.enabled
+    ? ollamaSettings.model || 'Ollama (local)'
+    : (MODELS.find((option) => option.id === settings.model)?.label ?? MODELS[0]!.label)
 
   const agent = useAgent((result) => {
     const entry: HistoryItem = {
@@ -125,6 +130,10 @@ export default function App() {
     setSettings((current) => ({ ...current, ...patch }))
   }
 
+  const updateOllama = (patch: Partial<OllamaSettings>) => {
+    setOllama((current) => normalizeOllamaSettings({ ...current, ...patch }))
+  }
+
   const renderView = () => {
     switch (view) {
       case 'projects':
@@ -147,6 +156,8 @@ export default function App() {
             onOpenApiKey={() => navigate('api-key')}
             apiKey={apiKey}
             desktopInfo={desktopInfo}
+            ollama={ollamaSettings}
+            onOllamaChange={updateOllama}
           />
         )
       case 'api-key':

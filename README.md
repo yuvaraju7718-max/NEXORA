@@ -52,6 +52,7 @@ Other scripts:
 ```bash
 npm run typecheck    # tsc --noEmit
 npm run mock:agent   # SSE test backend on :8787
+npm run agent:ollama # local Ollama bridge on :8788
 ```
 
 ## What works
@@ -111,6 +112,22 @@ scripts/
   dev-desktop.mjs            Vite + Electron dev launcher
   mock-agent.mjs             SSE test backend
 ```
+
+## Local Ollama (no API key)
+
+NEXORA can stream responses from a local [Ollama](https://ollama.com) model.
+
+```bash
+ollama pull llama3.2
+npm run agent:ollama                  # http://localhost:8788/api/agent
+npm run dev                           # in another terminal
+```
+
+Open **Settings → Agent → Local model (Ollama)**, enable it, pick a model, and
+send a prompt. Tokens stream through the same `AgentEvent` contract as the
+simulation, so the chat, task panel, history and cancel button all behave the
+same. The desktop Electron shell can also call Ollama over IPC, so the local
+model works without the HTTP bridge.
 
 ## Connecting a real agent
 
@@ -177,9 +194,8 @@ app is on the live endpoint or the simulation.
 resetting, so no component needs to change.
 
 The Electron bridge already provides `window.nexora` (identity, `getInfo`,
-`openExternal`). When a native agent core lands, add `run(prompt)` plus an event
-channel to `electron/preload.cjs` and branch inside `runAgent`; no component
-needs to change.
+`openExternal`, `listOllamaModels`, `run`). `runAgent` prefers this bridge in
+desktop mode, so the local Ollama model can be used without the HTTP bridge.
 
 ## Design tokens
 
@@ -198,7 +214,9 @@ disables ambient motion.
 
 ## Notes
 
-- Runs are simulated while the agent core is being wired.
+- Runs are simulated by default. Enable local Ollama for free real streaming, or
+  point `VITE_AGENT_ENDPOINT` at a backend that speaks the AgentEvent protocol.
 - API keys entered in this web build stay in `localStorage`; the desktop build
   is intended to store them with OS-level encryption.
-- No backend, no telemetry, no network calls are made by the app today.
+- No telemetry. Network calls only happen when you explicitly configure an agent
+  endpoint or local Ollama.

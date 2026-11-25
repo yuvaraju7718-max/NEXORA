@@ -1,5 +1,6 @@
 import type { AgentTask, OrbState } from '../types'
 import { uid } from './cn'
+import { loadOllamaSettings } from './ollama'
 
 /**
  * NEXORA agent transport.
@@ -37,14 +38,32 @@ export type AgentEvent =
   | { type: 'done' }
   | { type: 'error'; message: string }
 
-const AGENT_ENDPOINT = import.meta.env.VITE_AGENT_ENDPOINT as string | undefined
+const ENV_AGENT_ENDPOINT = import.meta.env.VITE_AGENT_ENDPOINT as string | undefined
 
-export function isLiveTransport(): boolean {
-  return Boolean(AGENT_ENDPOINT)
+export interface AgentConfig {
+  endpoint?: string | null
+  model?: string | null
+  ollamaUrl?: string | null
 }
 
+export type AgentTransport = 'desktop' | 'ollama' | 'remote' | 'simulation'
+
 export function getAgentEndpoint(): string | null {
-  return AGENT_ENDPOINT ?? null
+  if (ENV_AGENT_ENDPOINT) return ENV_AGENT_ENDPOINT
+  const settings = loadOllamaSettings()
+  return settings.enabled ? settings.endpoint : null
+}
+
+export function getAgentTransport(): AgentTransport {
+  if (typeof window !== 'undefined' && window.nexora?.isDesktop) return 'desktop'
+  if (ENV_AGENT_ENDPOINT) return 'remote'
+  const settings = loadOllamaSettings()
+  if (settings.enabled) return 'ollama'
+  return 'simulation'
+}
+
+export function isLiveTransport(): boolean {
+  return getAgentTransport() !== 'simulation'
 }
 
 interface PlannedStep {
@@ -267,6 +286,7 @@ export function runRemoteAgent(
   endpoint: string,
   prompt: string,
   handlers: AgentHandlers,
+  config: AgentConfig = {},
 ): AgentRun {
   const controller = new AbortController()
   let cancelled = false
@@ -330,7 +350,11 @@ export function runRemoteAgent(
           'Content-Type': 'application/json',
           Accept: 'text/event-stream, application/x-ndjson, application/json',
         },
-        body: JSON.stringify({ prompt }),
+        body: JSON.stringify({
+          prompt,
+          model: config.model ?? undefined,
+          ollamaUrl: config.ollamaUrl ?? undefined,
+        }),
         signal: controller.signal,
       })
 
@@ -372,10 +396,19 @@ export function runRemoteAgent(
 }
 
 /**
- * Single entry point used by the UI. Uses the live endpoint when
- * `VITE_AGENT_ENDPOINT` is configured; otherwise runs the local simulation.
+ * Single entry point used by the UI.
+ * Priority: Electron IPC bridge → env endpoint → user-configured Ollama endpoint → simulation.
  */
 export function runAgent(prompt: string, handlers: AgentHandlers): AgentRun {
-  if (AGENT_ENDPOINT) return runRemoteAgent(AGENT_ENDPOINT, prompt, handlers)
+  const settings = loadOllamaSettings()
+  const config: AgentConfig = { model: settings.model, ollamaUrl: settings.ollamaUrl }
+
+  if (typeof window !== 'undefined' && window.nexora?.run) {
+    return window.nexora.run(prompt, config, handlers)
+  }
+
+  const endpoint = ENV_AGENT_ENDPOINT ?? (settings.enabled ? settings.endpoint : null)
+  if (endpoint) return runRemoteAgent(endpoint, prompt, handlers, config)
+
   return runLocalAgent(prompt, handlers)
 }

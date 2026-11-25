@@ -1,13 +1,23 @@
 import { app, BrowserWindow, ipcMain, Menu, shell } from 'electron'
 import { existsSync } from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const DIST_INDEX = path.join(ROOT, 'dist', 'index.html')
 const DEV_URL = process.env.NEXORA_DEV_URL || 'http://localhost:5173'
 
 let mainWindow = null
+let agentCorePromise = null
+const activeRuns = new Map()
+
+function getAgentCore() {
+  if (!agentCorePromise) {
+    const corePath = path.join(ROOT, 'server', 'agent-core.mjs')
+    agentCorePromise = import(pathToFileURL(corePath).href)
+  }
+  return agentCorePromise
+}
 
 function isSafeExternal(url) {
   return /^https?:\/\//i.test(url)
@@ -115,6 +125,62 @@ function bootstrap() {
   ipcMain.handle('nexora:open-external', (_event, url) => {
     if (typeof url !== 'string' || !isSafeExternal(url)) return false
     void shell.openExternal(url)
+    return true
+  })
+
+  ipcMain.handle('nexora:ollama-models', async (_event, ollamaUrl) => {
+    try {
+      const { listOllamaModels } = await getAgentCore()
+      const models = await listOllamaModels(typeof ollamaUrl === 'string' ? ollamaUrl : undefined)
+      return { models }
+    } catch (error) {
+      return { models: [], error: error instanceof Error ? error.message : 'Failed to list models' }
+    }
+  })
+
+  ipcMain.handle('nexora:run-start', async (event, payload) => {
+    const prompt = typeof payload?.prompt === 'string' ? payload.prompt : ''
+    const model = typeof payload?.model === 'string' ? payload.model : ''
+    const ollamaUrl = typeof payload?.ollamaUrl === 'string' ? payload.ollamaUrl : ''
+    if (!prompt.trim()) return { error: 'prompt is required' }
+
+    const runID = crypto.randomUUID()
+    const controller = new AbortController()
+    activeRuns.set(runID, controller)
+
+    const send = (agentEvent) => {
+      if (controller.signal.aborted) return
+      if (event.sender.isDestroyed()) return
+      event.sender.send('nexora:run-event', { runID, event: agentEvent })
+    }
+
+    void (async () => {
+      try {
+        const { runOllamaAgent } = await getAgentCore()
+        await runOllamaAgent({ prompt, model, ollamaUrl }, send, controller.signal)
+      } catch (error) {
+        if (!controller.signal.aborted) {
+          const message =
+            error instanceof Error
+              ? error.message
+              : 'Ollama request failed. Is `ollama serve` running and the model pulled?'
+          send({ type: 'status', status: 'idle' })
+          send({ type: 'error', message })
+        }
+      } finally {
+        activeRuns.delete(runID)
+      }
+    })()
+
+    return { runID }
+  })
+
+  ipcMain.handle('nexora:run-cancel', (_event, runID) => {
+    const controller = activeRuns.get(runID)
+    if (controller) {
+      controller.abort()
+      activeRuns.delete(runID)
+    }
     return true
   })
 
