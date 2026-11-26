@@ -44,21 +44,36 @@ export interface AgentConfig {
   endpoint?: string | null
   model?: string | null
   ollamaUrl?: string | null
+  autonomy?: string | null
 }
 
-export type AgentTransport = 'desktop' | 'ollama' | 'remote' | 'simulation'
+export type AgentTransport = 'desktop' | 'ollama' | 'local' | 'remote' | 'simulation'
+
+function readAutonomy(): string {
+  try {
+    const raw = localStorage.getItem('nexora.settings')
+    if (!raw) return 'ask'
+    const parsed = JSON.parse(raw) as { autonomy?: string }
+    return typeof parsed.autonomy === 'string' ? parsed.autonomy : 'ask'
+  } catch {
+    return 'ask'
+  }
+}
 
 export function getAgentEndpoint(): string | null {
   if (ENV_AGENT_ENDPOINT) return ENV_AGENT_ENDPOINT
   const settings = loadOllamaSettings()
-  return settings.enabled ? settings.endpoint : null
+  if (settings.mode === 'ollama') return settings.endpoint
+  if (settings.mode === 'local') return settings.localEndpoint
+  return null
 }
 
 export function getAgentTransport(): AgentTransport {
-  if (typeof window !== 'undefined' && window.nexora?.isDesktop) return 'desktop'
+  if (typeof window !== 'undefined' && window.nexora?.isDesktop && loadOllamaSettings().mode === 'ollama') return 'desktop'
   if (ENV_AGENT_ENDPOINT) return 'remote'
   const settings = loadOllamaSettings()
-  if (settings.enabled) return 'ollama'
+  if (settings.mode === 'ollama') return 'ollama'
+  if (settings.mode === 'local') return 'local'
   return 'simulation'
 }
 
@@ -354,6 +369,7 @@ export function runRemoteAgent(
           prompt,
           model: config.model ?? undefined,
           ollamaUrl: config.ollamaUrl ?? undefined,
+          autonomy: config.autonomy ?? undefined,
         }),
         signal: controller.signal,
       })
@@ -397,18 +413,24 @@ export function runRemoteAgent(
 
 /**
  * Single entry point used by the UI.
- * Priority: Electron IPC bridge → env endpoint → user-configured Ollama endpoint → simulation.
+ * Priority: env endpoint → desktop Ollama bridge → configured local/ollama endpoint → simulation.
  */
 export function runAgent(prompt: string, handlers: AgentHandlers): AgentRun {
   const settings = loadOllamaSettings()
-  const config: AgentConfig = { model: settings.model, ollamaUrl: settings.ollamaUrl }
+  const config: AgentConfig = {
+    model: settings.model,
+    ollamaUrl: settings.ollamaUrl,
+    autonomy: readAutonomy(),
+  }
 
-  if (typeof window !== 'undefined' && window.nexora?.run) {
+  if (ENV_AGENT_ENDPOINT) return runRemoteAgent(ENV_AGENT_ENDPOINT, prompt, handlers, config)
+
+  if (typeof window !== 'undefined' && window.nexora?.run && settings.mode === 'ollama') {
     return window.nexora.run(prompt, config, handlers)
   }
 
-  const endpoint = ENV_AGENT_ENDPOINT ?? (settings.enabled ? settings.endpoint : null)
-  if (endpoint) return runRemoteAgent(endpoint, prompt, handlers, config)
+  if (settings.mode === 'ollama') return runRemoteAgent(settings.endpoint, prompt, handlers, config)
+  if (settings.mode === 'local') return runRemoteAgent(settings.localEndpoint, prompt, handlers, config)
 
   return runLocalAgent(prompt, handlers)
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ExternalLink, KeyRound, Moon, Plug, RefreshCw, Sun } from 'lucide-react'
+import { ExternalLink, KeyRound, Moon, RefreshCw, Sun } from 'lucide-react'
 import { MODELS, type Autonomy, type Settings } from '../../types'
 import { Badge, Field, SectionCard, Toggle } from '../ui/controls'
 import { Button } from '../ui/Button'
@@ -66,10 +66,10 @@ export function SettingsView({
   }
 
   useEffect(() => {
-    if (!ollama.enabled) return
+    if (ollama.mode !== 'ollama') return
     void refreshOllamaModels()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ollama.enabled, ollama.ollamaUrl])
+  }, [ollama.mode, ollama.ollamaUrl, ollama.endpoint])
 
   return (
     <ViewFrame title="Settings" subtitle="Model, autonomy and the waterglass appearance.">
@@ -123,33 +123,60 @@ export function SettingsView({
             <div className="rounded-xl border border-[rgb(var(--glass-border)/0.16)] bg-[rgb(var(--glass-tint)/0.05)] p-3">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-[13px] font-medium">Local model (Ollama)</p>
+                  <p className="text-[13px] font-medium">Agent mode</p>
                   <p className="mt-0.5 text-[11.5px] leading-relaxed text-muted">
-                    Run a local model with no API key. Requires Ollama running on this machine.
+                    Choose how NEXORA runs. Local modes need no API key.
                   </p>
                 </div>
-                <Badge tone={ollama.enabled ? 'success' : 'neutral'}>
-                  {ollama.enabled ? 'Enabled' : 'Off'}
+                <Badge tone={ollama.mode !== 'simulation' ? 'success' : 'neutral'}>
+                  {ollama.mode === 'simulation' ? 'Simulation' : ollama.mode === 'local' ? 'Local tools' : 'Ollama'}
                 </Badge>
               </div>
 
-              <div className="mt-3 flex flex-wrap items-center gap-2">
-                <Button
-                  variant={ollama.enabled ? 'primary' : 'subtle'}
-                  size="sm"
-                  onClick={() => onOllamaChange({ enabled: !ollama.enabled })}
-                >
-                  <Plug size={14} />
-                  {ollama.enabled ? 'Disable Ollama' : 'Use Ollama'}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => void refreshOllamaModels()}>
-                  <RefreshCw size={14} className={ollamaStatus === 'loading' ? 'animate-spin' : ''} />
-                  Refresh models
-                </Button>
+              <div className="segmented mt-3 w-full">
+                {([
+                  ['simulation', 'Simulation'],
+                  ['local', 'Local tools'],
+                  ['ollama', 'Ollama'],
+                ] as const).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    data-active={ollama.mode === value}
+                    onClick={() => onOllamaChange({ mode: value, enabled: value !== 'simulation' })}
+                    className="flex-1"
+                  >
+                    {label}
+                  </button>
+                ))}
               </div>
 
-              {ollama.enabled ? (
+              {ollama.mode === 'local' ? (
                 <div className="mt-3 space-y-3">
+                  <Field label="Local agent endpoint" hint="SSE">
+                    <input
+                      className="field"
+                      value={ollama.localEndpoint}
+                      onChange={(event) => onOllamaChange({ localEndpoint: event.target.value })}
+                      placeholder="http://localhost:8789/api/agent"
+                      spellCheck={false}
+                    />
+                  </Field>
+                  <p className="text-[11.5px] leading-relaxed text-muted">
+                    Runs real workspace actions with no AI key. Start it with <code className="font-mono text-[11px]">npm run agent:local</code>.
+                    Try prompts like “list files”, “read README.md”, “search agent”, or “run: git status --short”.
+                  </p>
+                </div>
+              ) : null}
+
+              {ollama.mode === 'ollama' ? (
+                <div className="mt-3 space-y-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => void refreshOllamaModels()}>
+                      <RefreshCw size={14} className={ollamaStatus === 'loading' ? 'animate-spin' : ''} />
+                      Refresh models
+                    </Button>
+                  </div>
                   <Field label="Ollama URL" hint="local">
                     <input
                       className="field"
@@ -204,7 +231,7 @@ export function SettingsView({
                     </p>
                   ) : (
                     <p className="text-[11.5px] text-muted">
-                      Tip: run `npm run agent:ollama` and pull a model like `ollama pull llama3.2`.
+                      Tip: run <code className="font-mono text-[11px]">npm run agent:ollama</code> and pull a model like <code className="font-mono text-[11px]">ollama pull llama3.2</code>.
                     </p>
                   )}
                 </div>
@@ -216,7 +243,7 @@ export function SettingsView({
                 className="field"
                 value={settings.model}
                 onChange={(event) => onChange({ model: event.target.value })}
-                disabled={ollama.enabled}
+                disabled={ollama.mode !== 'simulation'}
               >
                 {MODELS.map((option) => (
                   <option key={option.id} value={option.id}>
@@ -226,7 +253,9 @@ export function SettingsView({
               </select>
             </Field>
             <p className="-mt-2 text-[11.5px] text-muted">
-              {ollama.enabled ? 'Ollama overrides the hosted model while enabled.' : model.hint}
+              {ollama.mode !== 'simulation'
+                ? 'Local mode is active; the hosted model is kept as a fallback setting.'
+                : model.hint}
             </p>
 
             <Field label="Autonomy" hint="Approval policy">
@@ -268,9 +297,9 @@ export function SettingsView({
               </Button>
             </div>
             <p className="text-[11.5px] leading-relaxed text-muted">
-              {ollama.enabled
-                ? 'Ollama is active, so no hosted API key is required for chat.'
-                : 'This build stores the key locally in your browser. Use Ollama above for a free local option.'}
+              {ollama.mode !== 'simulation'
+                ? 'A local no-API-key mode is active. Hosted keys are only needed for cloud providers.'
+                : 'This build stores the key locally in your browser. Use Local tools or Ollama above for a free local option.'}
             </p>
           </div>
         </SectionCard>
@@ -286,8 +315,8 @@ export function SettingsView({
                 : []),
               ['Version', '0.1.0 · preview'],
               ['Interface', 'Waterglass UI'],
-              ['Transport', transport === 'ollama' ? 'Ollama (local)' : transport === 'desktop' ? 'Desktop bridge' : live ? 'Live endpoint' : 'Simulated agent'],
-              ['Model', ollama.enabled ? ollama.model || 'Not selected' : model.label],
+              ['Transport', transport === 'ollama' ? 'Ollama (local)' : transport === 'local' ? 'Local tools' : transport === 'desktop' ? 'Desktop bridge' : live ? 'Live endpoint' : 'Simulated agent'],
+              ['Model', ollama.mode === 'ollama' ? ollama.model || 'Not selected' : ollama.mode === 'local' ? 'Workspace tools (no AI key)' : model.label],
               ['Endpoint', transport === 'desktop' ? 'Electron IPC → Ollama' : live ? (getAgentEndpoint() ?? '—') : 'local simulation'],
               ['Stack', 'React 19 · Vite · Tailwind 4'],
             ].map(([label, value]) => (
@@ -303,9 +332,11 @@ export function SettingsView({
             <p className="text-[11.5px] leading-relaxed text-muted">
               {transport === 'ollama' || transport === 'desktop'
                 ? 'Local Ollama mode is active. Prompts go to your local model, and tokens stream back over the same AgentEvent contract — no hosted API key needed.'
-                : live
-                  ? 'Connected to the configured agent endpoint. Status, task and token events stream in over the wire protocol.'
-                  : 'Runs are simulated. Enable Ollama above for a free local model, or set VITE_AGENT_ENDPOINT for a hosted/backend agent.'}
+                : transport === 'local'
+                  ? 'Local tools mode is active. NEXORA can inspect files and run safe workspace commands through the local agent bridge — no API key needed.'
+                  : live
+                    ? 'Connected to the configured agent endpoint. Status, task and token events stream in over the wire protocol.'
+                    : 'Runs are simulated. Use Local tools or Ollama above for no-API-key local runs, or set VITE_AGENT_ENDPOINT for a hosted/backend agent.'}
             </p>
           </div>
         </SectionCard>

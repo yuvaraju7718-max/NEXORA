@@ -52,6 +52,7 @@ Other scripts:
 ```bash
 npm run typecheck    # tsc --noEmit
 npm run mock:agent   # SSE test backend on :8787
+npm run agent:local  # real local tool agent on :8789 (no AI key)
 npm run agent:ollama # local Ollama bridge on :8788
 ```
 
@@ -113,21 +114,29 @@ scripts/
   mock-agent.mjs             SSE test backend
 ```
 
-## Local Ollama (no API key)
+## Local agents (no API key)
 
-NEXORA can stream responses from a local [Ollama](https://ollama.com) model.
+NEXORA has two local no-key modes in **Settings → Agent**:
+
+- **Local tools** — `npm run agent:local` (`:8789`). Runs real workspace actions:
+  list/read/search files and run safe shell commands (respecting Autonomy). No
+  LLM, no API key.
+- **Ollama** — `npm run agent:ollama` (`:8788`) + a pulled Ollama model. Streams
+  real LLM tokens locally.
 
 ```bash
+# Local tools (no AI model needed)
+npm run agent:local
+npm run dev
+
+# or Ollama
 ollama pull llama3.2
-npm run agent:ollama                  # http://localhost:8788/api/agent
-npm run dev                           # in another terminal
+npm run agent:ollama
+npm run dev
 ```
 
-Open **Settings → Agent → Local model (Ollama)**, enable it, pick a model, and
-send a prompt. Tokens stream through the same `AgentEvent` contract as the
-simulation, so the chat, task panel, history and cancel button all behave the
-same. The desktop Electron shell can also call Ollama over IPC, so the local
-model works without the HTTP bridge.
+Both stream through the same `AgentEvent` contract, so chat, task panel,
+history and cancel behave the same. The Electron bridge can run Ollama over IPC.
 
 ## Connecting a real agent
 

@@ -1,17 +1,23 @@
+export type AgentMode = 'simulation' | 'local' | 'ollama'
+
 export interface OllamaSettings {
-  enabled: boolean
+  mode: AgentMode
+  enabled: boolean // legacy compat: true when mode !== 'simulation'
   model: string
   ollamaUrl: string
   endpoint: string
+  localEndpoint: string
 }
 
 export const OLLAMA_STORAGE_KEY = 'nexora.ollama'
 
 export const DEFAULT_OLLAMA_SETTINGS: OllamaSettings = {
+  mode: 'simulation',
   enabled: false,
   model: '',
   ollamaUrl: 'http://localhost:11434',
   endpoint: 'http://localhost:8788/api/agent',
+  localEndpoint: 'http://localhost:8789/api/agent',
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -20,8 +26,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function normalizeOllamaSettings(value: unknown): OllamaSettings {
   const raw = isRecord(value) ? value : {}
+  const legacyEnabled = typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULT_OLLAMA_SETTINGS.enabled
+  const modeRaw = raw.mode
+  const mode: AgentMode =
+    modeRaw === 'local' || modeRaw === 'ollama' || modeRaw === 'simulation'
+      ? modeRaw
+      : legacyEnabled
+        ? 'ollama'
+        : 'simulation'
   return {
-    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULT_OLLAMA_SETTINGS.enabled,
+    mode,
+    enabled: mode !== 'simulation',
     model: typeof raw.model === 'string' ? raw.model : DEFAULT_OLLAMA_SETTINGS.model,
     ollamaUrl:
       typeof raw.ollamaUrl === 'string' && raw.ollamaUrl.trim()
@@ -31,6 +46,10 @@ export function normalizeOllamaSettings(value: unknown): OllamaSettings {
       typeof raw.endpoint === 'string' && raw.endpoint.trim()
         ? raw.endpoint.trim().replace(/\/+$/, '')
         : DEFAULT_OLLAMA_SETTINGS.endpoint,
+    localEndpoint:
+      typeof raw.localEndpoint === 'string' && raw.localEndpoint.trim()
+        ? raw.localEndpoint.trim().replace(/\/+$/, '')
+        : DEFAULT_OLLAMA_SETTINGS.localEndpoint,
   }
 }
 
